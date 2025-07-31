@@ -1,5 +1,6 @@
 const std = @import("std");
 const Semaphore = std.Thread.Semaphore;
+const Mutex = std.Thread.Mutex;
 
 const zp = @import("zplacebo.zig");
 const vapoursynth = zp.vapoursynth;
@@ -27,9 +28,9 @@ const Data = struct {
     planes: [3]bool = @splat(true),
 
     vfs: [8]*priv = undefined,
-    sem_ok: [8]bool = @splat(true),
     threads: u32 = 3,
     sem: Semaphore = .{},
+    mutex: [8]Mutex = undefined,
 };
 
 fn runShader(d: *Data, p: *priv, src_img: *c.struct_pl_frame, frame_index: u8) !void {
@@ -114,9 +115,8 @@ fn processFrame(d: *Data, dst: *const ZAPI.ZFrame(*vs.Frame), src: *const ZAPI.Z
 
     var sem_idx: usize = 0;
     for (0..d.threads) |i| {
-        if (d.sem_ok[i]) {
+        if (d.mutex[i].tryLock()) {
             sem_idx = i;
-            d.sem_ok[i] = false;
             break;
         }
     }
@@ -176,7 +176,7 @@ fn processFrame(d: *Data, dst: *const ZAPI.ZFrame(*vs.Frame), src: *const ZAPI.Z
     try runShader(d, p, &src_img, frame_index);
     try download(p, dst, &src_data, &dst_img);
 
-    d.sem_ok[sem_idx] = true;
+    d.mutex[sem_idx].unlock();
     d.sem.post(); // Release the permit
 }
 
@@ -279,6 +279,8 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
 
     const log_level: c.enum_pl_log_level = map_in.getInt(u32, "log_level") orelse c.PL_LOG_ERR;
     for (0..d.threads) |i| {
+        d.mutex[i] = .{};
+
         d.vfs[i] = zp.placeboInit(log_level) catch |err| {
             const err_msg = std.fmt.allocPrintZ(allocator, "Deband: Failed initializing libplacebo ({any}).", .{err}) catch unreachable;
             map_out.setError(err_msg);
