@@ -1,0 +1,119 @@
+name: Build
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0 # do not update!!!
+          cache: true
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+          use-cache: false
+
+      - name: Cache libdovi
+        id: cache-libdovi
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps_build/lib/dovi.lib
+            deps_build/include/libdovi
+          key: ${{ runner.os }}-libdovi-${{ hashFiles('deps/dovi_tool/dolby_vision/**') }}
+
+      - name: Setup Rust toolchain
+        if: steps.cache-libdovi.outputs.cache-hit != 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@v1.13.0
+
+      - name: Build libdovi
+        if: steps.cache-libdovi.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          set prefix=%cd%\deps_build
+          cd deps\dovi_tool\dolby_vision
+          cargo install cargo-c
+          cargo cinstall --release --prefix %prefix%
+
+      - name: Cache libplacebo
+        id: cache-libplacebo
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps_build/lib/libplacebo.a
+            deps_build/include/libplacebo
+          key: ${{ runner.os }}-libplacebo-${{ hashFiles('deps/libplacebo/**') }}
+
+      - name: Setup Python
+        if: steps.cache-libplacebo.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install ninja + meson
+        if: steps.cache-libplacebo.outputs.cache-hit != 'true'
+        run: pip install ninja meson
+
+      - name: Setup clang-cl
+        uses: KyleMayes/install-llvm-action@v2
+        if: steps.cache-libplacebo.outputs.cache-hit != 'true'
+        with:
+          version: "20.1.4"
+          cached: true
+
+      - name: Build libplacebo
+        if: steps.cache-libplacebo.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          set prefix=%cd%\deps_build
+          cd deps\libplacebo
+          git apply ..\libplacebo_meson.patch
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          set INCLUDE=%INCLUDE%;%VULKAN_SDK%\Include;%prefix%\include
+          set LIB=%LIB%;%VULKAN_SDK%\Lib;%prefix%\lib
+          set CC=clang-cl
+          set CXX=clang-cl
+          meson setup build -Dvulkan-registry=%VULKAN_SDK%\share\vulkan\registry\vk.xml --default-library=static --buildtype=release -Ddemos=false -Dopengl=disabled -Dd3d11=disabled --prefix=%prefix%
+          ninja -C build
+          ninja -C build install
+
+      - name: Build zplacebo
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows -Dcpu=x86_64_v3
+          cd zig-out\bin && dir
+
+      - name: Prepare artifact files
+        run: |
+          mkdir artifact
+          copy zig-out/bin/zplacebo.dll artifact/zplacebo.dll
+          copy ${{ env.VULKAN_SDK }}/Bin/shaderc_shared.dll artifact/shaderc_shared.dll
+
+      - name: Set last tag and short SHA
+        shell: bash
+        run: |
+          echo "LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'untagged')" >> $GITHUB_ENV
+          echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
+
+      - name: Upload
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: zplacebo-windows-${{ env.LAST_TAG }}.${{ env.SHORT_SHA }}
+          path: artifact/*
+
+

@@ -1,0 +1,6 @@
+
+/deps_build
+/.zig-cache
+/zig-out
+/.vscode
+/.vsjet

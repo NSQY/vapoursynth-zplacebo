@@ -1,0 +1,52 @@
+diff --git a/meson.build b/meson.build
+index 3d36569..0e2988e 100644
+--- a/meson.build
++++ b/meson.build
+@@ -392,7 +392,8 @@ conf_internal.set('PL_DEBUG_ABORT', get_option('debug-abort'))
+ build_opts = [
+   # Warnings
+   '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
+-  '-fno-math-errno',
++  # '-fno-math-errno',
++  '/clang:-fno-math-errno', # windows clang-cl
+ ]
+ 
+ link_args = []
+diff --git a/src/glsl/meson.build b/src/glsl/meson.build
+index 8fb5e69..7a3d421 100644
+--- a/src/glsl/meson.build
++++ b/src/glsl/meson.build
+@@ -1,5 +1,6 @@
+ # shaderc
+-shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
++# shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
++shaderc = cc.find_library('shaderc_shared', required: get_option('shaderc')) # windows build
+ components.set('shaderc', shaderc.found())
+ if shaderc.found()
+   build_deps += shaderc
+diff --git a/src/meson.build b/src/meson.build
+index 71a6168..b2517a0 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -184,7 +184,8 @@ endif
+ dovi = get_option('dovi')
+ components.set('dovi', dovi.allowed())
+ 
+-libdovi = dependency('dovi', version: '>=1.6.7', required: get_option('libdovi').require(dovi.allowed()))
++# libdovi = dependency('dovi', version: '>=1.6.7', required: get_option('libdovi').require(dovi.allowed()))
++libdovi = cc.find_library('dovi', required: get_option('libdovi').require(dovi.allowed())) # windows build
+ components.set('libdovi', libdovi.found())
+ if libdovi.found()
+   build_deps += libdovi
+diff --git a/src/vulkan/meson.build b/src/vulkan/meson.build
+index 64c5572..17d800e 100644
+--- a/src/vulkan/meson.build
++++ b/src/vulkan/meson.build
+@@ -1,6 +1,6 @@
+ vulkan_build = get_option('vulkan')
+ vulkan_link = get_option('vk-proc-addr')
+-vulkan_loader = dependency('vulkan', required: false)
++vulkan_loader = cc.find_library('vulkan-1', required: true)
+ vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
+ registry_xml = get_option('vulkan-registry')
+ 
