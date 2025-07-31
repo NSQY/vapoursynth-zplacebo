@@ -14,7 +14,7 @@ Windows build (for test) in [actions](https://github.com/dnjulek/vapoursynth-zpl
 ### Deband
 
 ```python
-placebo.Deband(
+zplacebo.Deband(
     clip: vs.VideoNode,
     planes: int[] = None,
     iterations: int = 1,
