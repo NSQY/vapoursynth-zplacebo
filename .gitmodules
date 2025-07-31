@@ -1,0 +1,6 @@
+[submodule "deps/libplacebo"]
+	path = deps/libplacebo
+	url = https://github.com/haasn/libplacebo
+[submodule "deps/dovi_tool"]
+	path = deps/dovi_tool
+	url = https://github.com/quietvoid/dovi_tool
