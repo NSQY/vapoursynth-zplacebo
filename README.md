@@ -2,6 +2,15 @@
 
 A Zig VapourSynth plugin based on [Lypheo/vs-placebo](https://github.com/Lypheo/vs-placebo).
 
+WIP!!\
+Windows build (for test) in [actions](https://github.com/dnjulek/vapoursynth-zplacebo/actions).
+
+## Changes from vs-placebo:
+
+- planes arg: from `1 | 2 | 4` to `[0, 1, 2]` input.
+- shared build: if we link `shaderc_combined.lib` Vulkan won't start, so I'm using `shaderc_shared.dll` (It's inside the same .zip file).
+- threads arg: increase speed by using Vulkan in parallel, avoid split planes.
+
 ### Deband
 
 ```python
