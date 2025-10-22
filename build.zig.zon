@@ -2,7 +2,7 @@
     .name = .zplacebo,
     .version = "1.0.0",
     .paths = .{""},
-    .fingerprint = 0xcda4a3d9dd3345d8,
+    .fingerprint = 0x82f7370cb64bdc78,
     .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .vapoursynth = .{
