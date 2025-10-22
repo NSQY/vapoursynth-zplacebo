@@ -24,8 +24,8 @@ jobs:
 
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.1
-          use-cache: false
+          version: 0.15.2
+          use-cache: true
 
       - name: Cache libdovi
         id: cache-libdovi
@@ -36,13 +36,28 @@ jobs:
             deps_build/include/libdovi
           key: ${{ runner.os }}-libdovi-${{ hashFiles('deps/dovi_tool/dolby_vision/**') }}
 
-      - name: Setup Rust toolchain
+      - name: Cache Rust toolchain
         if: steps.cache-libdovi.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Setup Rust toolchain
+        if: ${{ steps.cache-libdovi.outputs.cache-hit != 'true' }}
         uses: actions-rust-lang/setup-rust-toolchain@v1.13.0
 
       - name: Build libdovi
         if: steps.cache-libdovi.outputs.cache-hit != 'true'
         shell: cmd
+        env:
+          RUSTFLAGS: ''
+          VULKAN_SDK: ${{ env.VULKAN_SDK }}
+          CACHE_ON_FAILURE: true
         run: |
           set prefix=%cd%\deps_build
           cd deps\dovi_tool\dolby_vision
@@ -59,10 +74,11 @@ jobs:
           key: ${{ runner.os }}-libplacebo-${{ hashFiles('deps/libplacebo/**') }}
 
       - name: Setup Python
-        if: steps.cache-libplacebo.outputs.cache-hit != 'true'
+        if: ${{ steps.cache-libplacebo.outputs.cache-hit != 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: 'pip'
 
       - name: Install ninja + meson
         if: steps.cache-libplacebo.outputs.cache-hit != 'true'
@@ -70,7 +86,7 @@ jobs:
 
       - name: Setup clang-cl
         uses: KyleMayes/install-llvm-action@v2
-        if: steps.cache-libplacebo.outputs.cache-hit != 'true'
+        if: ${{ steps.cache-libplacebo.outputs.cache-hit != 'true' }}
         with:
           version: "20.1.4"
           cached: true
@@ -99,10 +115,11 @@ jobs:
           cd zig-out\bin && dir
 
       - name: Prepare artifact files
+        shell: pwsh
         run: |
-          mkdir artifact
-          copy zig-out/bin/zplacebo.dll artifact/zplacebo.dll
-          copy ${{ env.VULKAN_SDK }}/Bin/shaderc_shared.dll artifact/shaderc_shared.dll
+          New-Item -ItemType Directory -Path "artifact"
+          Copy-Item "zig-out/bin/zplacebo.dll" "artifact/zplacebo.dll"
+          Copy-Item "${env:VULKAN_SDK}/Bin/shaderc_shared.dll" "artifact/shaderc_shared.dll"
 
       - name: Set last tag and short SHA
         shell: bash
