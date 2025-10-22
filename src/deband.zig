@@ -180,20 +180,22 @@ fn processFrame(d: *Data, dst: *const ZAPI.ZFrame(*vs.Frame), src: *const ZAPI.Z
     d.sem.post(); // Release the permit
 }
 
-fn getFrame(n: c_int, activation_reason: ar, instance_data: ?*anyopaque, _: ?*?*anyopaque, frame_ctx: ?*vs.FrameContext, core: ?*vs.Core, vsapi: ?*const vs.API) callconv(.C) ?*const vs.Frame {
+fn getFrame(n: c_int, activation_reason: ar, instance_data: ?*anyopaque, _: ?*?*anyopaque, frame_ctx: ?*vs.FrameContext, core: ?*vs.Core, vsapi: ?*const vs.API) callconv(.c) ?*const vs.Frame {
     const d: *Data = @ptrCast(@alignCast(instance_data));
-    const zapi = ZAPI.init(vsapi, core);
+    const zapi = ZAPI.init(vsapi, core, frame_ctx);
 
     if (activation_reason == .Initial) {
-        zapi.requestFrameFilter(n, d.node, frame_ctx);
+        zapi.requestFrameFilter(n, d.node);
     } else if (activation_reason == .AllFramesReady) {
-        const src = zapi.initZFrame(d.node, n, frame_ctx);
+        const src = zapi.initZFrame(d.node, n);
         defer src.deinit();
         const dst = src.newVideoFrame2(d.planes);
 
         processFrame(d, &dst, &src, n) catch |err| {
-            const err_msg = std.fmt.allocPrintZ(allocator, "{s}: {any}", .{ filter_name, err }) catch unreachable;
-            zapi.setFilterError(err_msg, frame_ctx);
+            const msg = std.fmt.allocPrint(allocator, "{s}: {any}", .{ filter_name, err }) catch unreachable;
+            defer allocator.free(msg);
+            const err_msg = allocator.dupeZ(u8, msg) catch unreachable;
+            zapi.setFilterError(err_msg);
             allocator.free(err_msg);
             dst.deinit();
             return null;
@@ -205,8 +207,8 @@ fn getFrame(n: c_int, activation_reason: ar, instance_data: ?*anyopaque, _: ?*?*
     return null;
 }
 
-fn free(instance_data: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API) callconv(.C) void {
-    const zapi = ZAPI.init(vsapi, core);
+fn free(instance_data: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API) callconv(.c) void {
+    const zapi = ZAPI.init(vsapi, core, null);
     const d: *Data = @ptrCast(@alignCast(instance_data));
     zapi.freeNode(d.node);
 
@@ -221,9 +223,9 @@ fn free(instance_data: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API) call
     allocator.destroy(d);
 }
 
-pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API) callconv(.C) void {
+pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API) callconv(.c) void {
     var d: Data = .{};
-    const zapi = ZAPI.init(vsapi, core);
+    const zapi = ZAPI.init(vsapi, core, null);
     const map_in = zapi.initZMap(in);
     const map_out = zapi.initZMap(out);
 
@@ -282,7 +284,9 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
         d.mutex[i] = .{};
 
         d.vfs[i] = zp.placeboInit(log_level) catch |err| {
-            const err_msg = std.fmt.allocPrintZ(allocator, "Deband: Failed initializing libplacebo ({any}).", .{err}) catch unreachable;
+            const msg = std.fmt.allocPrint(allocator, "Deband: Failed initializing libplacebo ({any}).", .{err}) catch unreachable;
+            defer allocator.free(msg);
+            const err_msg = allocator.dupeZ(u8, msg) catch unreachable;
             map_out.setError(err_msg);
             zapi.freeNode(d.node);
             allocator.free(err_msg);
