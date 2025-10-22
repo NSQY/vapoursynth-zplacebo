@@ -5,11 +5,13 @@ pub const vapoursynth = @import("vapoursynth");
 const vs = vapoursynth.vapoursynth4;
 
 const deband = @import("deband.zig");
+const shader = @import("shader.zig");
 // const resample = @import("resample.zig");
 
 pub const c = @cImport({
     @cInclude("libplacebo/dispatch.h");
     @cInclude("libplacebo/shaders/sampling.h");
+    @cInclude("libplacebo/shaders/custom.h");
     @cInclude("libplacebo/utils/upload.h");
     @cInclude("libplacebo/vulkan.h");
 });
@@ -35,9 +37,11 @@ pub fn placeboInit(log_level: c.enum_pl_log_level) !*priv {
     var ip = c.pl_vk_inst_default_params;
     vp.allow_software = true;
     //  ip.debug = true;
+    vp.max_api_version = c.VK_API_VERSION_1_2;
+    ip.max_api_version = c.VK_API_VERSION_1_2;
     vp.instance_params = &ip;
 
-    p.log = c.pl_log_create_351(351, &(c.struct_pl_log_params{
+    p.log = c.pl_log_create_351(c.PL_API_VER, &(c.struct_pl_log_params{
         .log_cb = &c.pl_log_color,
         .log_priv = null,
         .log_level = log_level,
@@ -75,4 +79,13 @@ export fn VapourSynthPluginInit2(plugin: *vs.Plugin, vspapi: *const vs.PLUGINAPI
 
     _ = vspapi.registerFunction.?("Deband", "clip:vnode;planes:int:opt;iterations:int:opt;threshold:float:opt;radius:float:opt;" ++
         "grain:float:opt;dither:int:opt;dither_algo:int:opt;threads:int:opt;log_level:int:opt;", "clip:vnode;", deband.create, null, plugin);
+
+    _ = vspapi.registerFunction.?(
+        "Shader",
+        "clip:vnode;shader_code:data:opt;shader_path:data:opt;threads:int:opt;log_level:int:opt;",
+        "clip:vnode;",
+        shader.create,
+        null,
+        plugin,
+    );
 }
