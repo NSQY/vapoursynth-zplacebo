@@ -1,5 +1,7 @@
 const std = @import("std");
 
+pub const min_zig_version = std.SemanticVersion{ .major = 0, .minor = 15, .patch = 0 };
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -28,8 +30,8 @@ pub fn build(b: *std.Build) !void {
         lib.root_module.strip = true;
     }
 
-    lib.linkLibC();
-    lib.linkLibCpp();
+    lib.root_module.link_libc = true;
+    lib.root_module.link_libcpp = true;
 
     if (os == .windows) {
         // Add Vulkan SDK include path
@@ -40,18 +42,18 @@ pub fn build(b: *std.Build) !void {
 
         const vk_include_path = try std.fs.path.join(b.allocator, &[_][]const u8{ vk_sdk_path, "Include" });
         defer b.allocator.free(vk_include_path);
-        lib.addIncludePath(.{ .cwd_relative = vk_include_path });
+        lib.root_module.addIncludePath(.{ .cwd_relative = vk_include_path });
 
-        lib.addIncludePath(.{ .cwd_relative = "deps_build/include" });
+        lib.root_module.addIncludePath(.{ .cwd_relative = "deps_build/include" });
 
         // Add Windows library paths
-        lib.addLibraryPath(.{ .cwd_relative = "C:/WINDOWS/system32" });
-        lib.addLibraryPath(.{ .cwd_relative = "deps_build/lib" });
+        lib.root_module.addLibraryPath(.{ .cwd_relative = "C:/WINDOWS/system32" });
+        lib.root_module.addLibraryPath(.{ .cwd_relative = "deps_build/lib" });
 
         // Add Vulkan SDK library path
         const vk_lib_path = try std.fs.path.join(b.allocator, &[_][]const u8{ vk_sdk_path, "Lib" });
         defer b.allocator.free(vk_lib_path);
-        lib.addLibraryPath(.{ .cwd_relative = vk_lib_path });
+        lib.root_module.addLibraryPath(.{ .cwd_relative = vk_lib_path });
 
         // Parse and add LIB environment variable paths
         const lib_env = std.process.getEnvVarOwned(b.allocator, "LIB") catch {
@@ -63,13 +65,13 @@ pub fn build(b: *std.Build) !void {
         while (it.next()) |path| {
             const trimmed_path = std.mem.trim(u8, path, " \t");
             if (trimmed_path.len > 0) {
-                lib.addLibraryPath(.{ .cwd_relative = trimmed_path });
+                lib.root_module.addLibraryPath(.{ .cwd_relative = trimmed_path });
             }
         }
 
         // Link Windows libraries (dynamic)
         for (windows_libs) |lib_name| {
-            lib.linkSystemLibrary2(lib_name, .{
+            lib.root_module.linkSystemLibrary(lib_name, .{
                 .preferred_link_mode = .dynamic,
                 .needed = true,
             });
@@ -77,13 +79,16 @@ pub fn build(b: *std.Build) !void {
 
         // Link Windows libraries (static)
         for (windows_libs2) |lib_name| {
-            lib.linkSystemLibrary2(lib_name, .{
+            lib.root_module.linkSystemLibrary(lib_name, .{
                 .preferred_link_mode = .static,
                 .needed = true,
             });
         }
     } else {
-        lib.linkSystemLibrary("placebo");
+        lib.root_module.linkSystemLibrary("placebo", .{
+            .preferred_link_mode = .dynamic,
+            .needed = true,
+        });
     }
 
     b.installArtifact(lib);
